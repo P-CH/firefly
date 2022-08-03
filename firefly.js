@@ -1,8 +1,15 @@
 let http = require("http");
 let fs = require("fs");
 let os = require("os");
-let indexer = param => process.argv[process.argv.indexOf(param) + 1];
-let [worp, relp, listing, mclass, obj] = Array(5).fill("");
+let options = [
+    "\x1b[32m-r\x1b[37m - sets the root of the file system part hosted (default: working directory)",
+    "\x1b[32m-p\x1b[37m - sets the port used (default: 80)",
+    "\x1b[32m-n\x1b[37m - sets the first 16 bit of the used network address (default: 192.168)",
+    "\x1b[32m-i\x1b[37m - sets the network interface used (default: first interface with an IP address matching the network address pattern)",
+    "\x1b[32m-d\x1b[37m - enables debug mode"
+]
+let indexer = param => process.argv.slice(2)?.[process.argv.slice(2)?.indexOf(param) + 1];
+let [worp, relp, listing, mclass, obj, sympointer] = Array(6).fill("");
 let isSym = false;
 let errlvl = 0;
 let ftypes = {
@@ -16,29 +23,40 @@ let ftypes = {
 let fcontent = {};
 let root = process.argv.includes("-r") && /^(([A-Z]:\\)|\/).*$/.test(indexer("-r")) ? indexer("-r") : process.cwd();
 let port = process.argv.includes("-p") && /^\d+$/.test(indexer("-p")) ? indexer("-p") : 80;
-let netaddr = process.argv.includes("-n") && /^\d{3}\.\d{3}$/.test(indexer("-n")) ? indexer("-n") : "192.168";
+let netaddr = process.argv.includes("-n") && /^\d{3}\.\d\d?\d?$/.test(indexer("-n")) ? indexer("-n") : "192.168";
+let interface = process.argv.includes("-i") && os.networkInterfaces()[indexer("-i")] ? indexer("-i") : undefined;
 let debug = process.argv.includes("-d") ? true : false;
 let env_root = process.platform == "win32" ? "\\" : "/";
-let ip = [...(os.networkInterfaces().Ethernet || []), ...(os.networkInterfaces().WLAN || [])].filter(f => {if(f.address.startsWith(netaddr)) return f})[0]?.address;
+let interfacelist = Object.keys(os.networkInterfaces()).reduce((t, interface) => {t[interface] = os.networkInterfaces()[interface].map(obj => obj.address); return t}, {});
+let ip = Object.values(interface ? {[interface]:os.networkInterfaces()[interface].map(obj => obj.address)} : interfacelist).reduce((t, interface) => [...t, ...interface]).filter(f => {if(f.startsWith(netaddr)) return f})[0];
+let used_interface = Object.entries(interfacelist).filter(interface => interface[1].includes(ip))[0]?.[0];
 function debuginfo(socket){
     d = new Date(Date.now());
     return `[${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}:${d.getMilliseconds()}][${socket.remoteAddress.split(":")[3]}]`;
 }
 
+if(process.argv.includes("-h") || process.argv.includes("--help")){
+    console.log(`Options:\n   ${options.join("\n   ")}\n\nThe specified interface might be overwritten if it does not exist but another interface supports the configured network address.`);
+    process.exit(0);
+}
 console.log("\x1b[32mStarted Firefly.\x1b[37m");
-console.log(`Root Directory: \x1b[36m"${root}"\x1b[37m\nPort: \x1b[36m${port}\x1b[37m\nLocal Address: \x1b[36m${ip}\x1b[37m\n`);
+if(!ip){
+    console.log(`\x1b[31mSpecifed interface (${indexer("-i")}) does not ${interface ? `have the network address "${netaddr}"` : `exist and there is no alternative interface supporting the configured network address (${netaddr})`}\x1b[37m`);
+    process.exit(1);
+}
+console.log(`Root Directory: \x1b[36m${root}\x1b[37m\nPort: \x1b[36m${port}\x1b[37m\nLocal Address: \x1b[36m${ip}\x1b[37m (using "${used_interface}"${(process.argv.includes("-i") && os.networkInterfaces()[indexer("-i")]) || !process.argv.includes("-i") ? "" : `,\x1b[31m not "${indexer("-i")}"\x1b[37m`})\n`);
 http.createServer((req, res) => {
     if(req.url == "/favicon.ico") return;
     worp = req.url.indexOf("?") == 1 ? decodeURI(req.url.substring(2)).replaceAll(/(\/|\\)\.\./g, "") : root;
     if(/.+(\/|\\)\.\..*/.test(decodeURI(req.url))){
         if(debug) console.log(`[\x1b[31mAlert\x1b[37m][\x1b[33m308\x1b[37m]${debuginfo(req.socket)} --> Possibly attempted directory traversal ("${req.url.substring(2)}")`);
-        res.writeHead(308, {"Location":`http://${ip}/?${worp}`});
+        res.writeHead(308, {"Location":`http://${ip}:${port}/?${worp}`});
         res.end();
         return;
     }
-    if(!worp.includes(root)){
+    if(!worp.toLowerCase().includes(root.toLocaleLowerCase())){
         if(debug) console.log(`[\x1b[33mWarn\x1b[37m][\x1b[33m307\x1b[37m]${debuginfo(req.socket)} --> Tried to access direcory/file below the root ("${req.url.substring(2)}")`);
-        res.writeHead(307, {"Location":`http://${ip}/?${root}`});
+        res.writeHead(307, {"Location":`http://${ip}:${port}/?${root}`});
         res.end();
         return;
     }
@@ -92,9 +110,11 @@ http.createServer((req, res) => {
                     fcontent[obj] = "File/Directory cannot be accessed due to the lack of read permissions."
                 }
                 if(!fcontent[obj]) fcontent[obj] = fs.statSync(obj).size <= 3000000 ? fs.readFileSync(obj, "utf-8") : "File size exceeds 3MB and could not be read to reduce loading times.";
-                listing += `<a href="?${obj}" class="${mclass}">${elem} ${isSym ? "(" + fs.readlinkSync(obj) + ")" : ""}</a><br>`;
+                try {sympointer = isSym ? `(${fs.readlinkSync(obj)})` : ""} catch {};
+                listing += `<a href="?${obj}" class="${mclass}">${elem} ${sympointer}</a><br>`;
                 mclass = "";
                 errlvl = 0;
+                isSym = false;
             });
             res.writeHead(200, {"Content-Type":"text/html"});
             res.write(`
