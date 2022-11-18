@@ -140,7 +140,10 @@ let CliColorPrint = text => {
     Object.keys(colors).forEach(color => {text = text.replaceAll(color, colors[color])});
     console.log(text);
 }
+/**
+ * Returns a list of all standard printable characters (ASCII 32 through 126)
+ * @returns {String[]}
+ */
+let Characters = Object.keys([...Array(95).keys()]).map(key => String.fromCharCode(parseInt(key) + 32));
 
-
-module.exports = {Parser, FileD, ExitMsg, CliColorPrint}
-
+module.exports = {Parser, FileD, ExitMsg, CliColorPrint, Characters}
