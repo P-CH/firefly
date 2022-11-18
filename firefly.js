@@ -1,6 +1,7 @@
-let os = require("os");
-let http = require("http");
 let fs = require("fs");
+let http = require("http");
+let os = require("os");
+let path = require("path");
 
 let {Parser, FileD} = require("./coreutils/main");
 let Clicp = require("./coreutils/main").CliColorPrint;
@@ -47,9 +48,8 @@ parser.help = "<options>\nThe specified interface might be overwritten if it doe
 
 if(process.argv.includes("-h") || process.argv.includes("--help")) parser.showhelp();
 
-let [worp, relp, listing, mclass, obj, sympointer, symprefix] = Array(7).fill("");
+let [worp, relp, listing, mclass, obj, sympointer, symprefix] = Array(8).fill("");
 let isSym = false;
-let errlvl = 0;
 let ftypes = {
     exe: [".exe", ".elf"],
     lnk: [".lnk", ".url"],
@@ -59,7 +59,7 @@ let ftypes = {
     txt: [".txt", ".doc", ".docx", ".rtf", ".log"],
     vid: [".mp4", ".mov", ".avi", ".mkv", ".wmv"]
 }
-let root = parser.get("root");
+let root = parser.get("root").replaceAll("\\", "/");
 let port = parser.get("port");
 let netaddr = parser.get("netaddr");
 let interface = parser.get("interface");
@@ -70,7 +70,11 @@ let ip = Object.values(interface ? {[interface]:os.networkInterfaces()[interface
 let used_interface = Object.entries(interfacelist).filter(interface => interface[1].includes(ip))[0]?.[0];
 function debuginfo(socket){
     d = new Date(Date.now());
-    return `[${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}:${d.getMilliseconds()}][${socket.remoteAddress.split(":")[3]}]`;
+    h = d.getHours() < 10 ? "0" + d.getHours() : d.getHours();
+    m = d.getMinutes() < 10 ? "0" + d.getMinutes() : d.getMinutes();
+    s = d.getSeconds() < 10 ? "0" + d.getSeconds() : d.getSeconds();
+    ms = d.getMilliseconds() < 100 ? d.getMilliseconds() < 10 ? "00" + d.getMilliseconds() : "0" + d.getMilliseconds() : d.getMilliseconds();
+    return `[${h}:${m}:${s}:${ms}][${socket.remoteAddress.split(":")[3]}]`;
 }
 
 Clicp("<!fggreen>Started Firefly.<!fgwhite>");
@@ -81,16 +85,16 @@ if(!ip){
 Clicp(`Root Directory: <!fgcyan>${root}<!fgwhite>\nPort: <!fgcyan>${port}<!fgwhite>\nLocal Address: <!fgcyan>${ip}<!fgwhite> (using "${used_interface}"${(process.argv.includes("-i") && os.networkInterfaces()[parser.finder("-i")]) || !process.argv.includes("-i") ? "" : `,<!fgred> not "${parser.finder("-i")}"<!fgwhite>`})\n`);
 http.createServer((req, res) => {
     if(req.url == "/favicon.ico") return;
-    worp = req.url.indexOf("?") == 1 ? decodeURI(req.url.substring(2)).replaceAll(/(\/|\\)\.\./g, "").replace("\\\\", "\\") : root;
+    worp = req.url != "/" ? decodeURI(req.url.substring(1)).replaceAll(/(\/|\\)\.\./g, "").replace("\\\\", "\\") : root;
     if(/.+(\/|\\)\.\..*/.test(decodeURI(req.url))){
-        if(debug) Clicp(`[<!fgred>Alert<!fgwhite>][<!fgyellow>308<!fgwhite>]${debuginfo(req.socket)} --> Possibly attempted directory traversal ("${req.url.substring(2)}")`);
-        res.writeHead(308, {"Location":`http://${ip}:${port}/?${worp}`});
+        if(debug) Clicp(`[<!fgred>Alert<!fgwhite>][<!fgyellow>308<!fgwhite>]${debuginfo(req.socket)} --> Possibly attempted directory traversal ("${req.url.substring(1)}")`);
+        res.writeHead(308, {"Location":`http://${ip}:${port}/${worp}`});
         res.end();
         return;
     }
     if(!worp.toLowerCase().includes(root.toLowerCase())){
-        if(debug) Clicp(`[<!fgyellow>Warn<!fgwhite>][<!fgyellow>307<!fgwhite>]${debuginfo(req.socket)} --> Tried to access direcory/file below the root ("${req.url.substring(2)}")`);
-        res.writeHead(307, {"Location":`http://${ip}:${port}/?${root}`});
+        if(debug) Clicp(`[<!fgyellow>Warn<!fgwhite>][<!fgyellow>307<!fgwhite>]${debuginfo(req.socket)} --> Tried to access direcory/file below the root ("${req.url.substring(1)}")`);
+        res.writeHead(307, {"Location":`http://${ip}:${port}/${root}`});
         res.end();
         return;
     }
@@ -113,10 +117,10 @@ http.createServer((req, res) => {
             if(debug) Clicp(`[<!fgmagenta>Error<!fgwhite>][<!fgred>415<!fgwhite>]${debuginfo(req.socket)} --> Requested resource is used for inter-process communication and cannot be read. (${worp})`)
         } else {
             relp = root == worp ? env_root : worp.replace(root, "");
-            if(relp != env_root) listing += `<a href="${env_root}" class="dir"><b>${env_root}</b></a><br><a href="?${worp.slice(0, worp.lastIndexOf(env_root))}" class="dir"><b>..</b></a><br>`;
+            if(relp != env_root) listing += `<a href="${env_root}" class="dir"><b>${env_root}</b></a><br><a href="/${path.join(worp, "..")}" class="dir"><b>..</b></a><br>`;
             fs.readdirSync(worp).forEach(elem => {
                 obj = `${worp}${worp == root ? "" : env_root}${elem}`;
-                try {isSym = fs.lstatSync(obj).isSymbolicLink() ? true : false} catch {};
+                try {isSym = fs.lstatSync(obj).isSymbolicLink()} catch {};
                 try {sympointer = isSym ? `(${fs.readlinkSync(obj)})` : ""} catch {};
                 symprefix = process.platform != "win32" ? "/" : "";
                 finder: for(o of Object.entries(ftypes)){
@@ -132,7 +136,7 @@ http.createServer((req, res) => {
                 try {if(fs.lstatSync(obj).isDirectory() || (isSym && fs.lstatSync(symprefix + fs.readlinkSync(obj)).isDirectory())) mclass = "dir"} catch {};
                 if(FileD(obj) == "?") mclass = "r_err";
                 if(FileD(obj) != "?" && FileD(obj) != "-" && FileD(obj) != "d") mclass += " fd";
-                listing += `<div style="display: inline-block; width: 1.5vw;">(${FileD(obj)})</div> ${FileD(obj) == "-" || FileD(obj) == "l" && mclass != "dir fd" ? `<a href="?${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" download="${elem}"><i class="fa fa-download"></i></a>`: `<i class="fa fa-download" style="visibility: hidden;"></i>`} <a href="?${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" class="${mclass}">${elem} ${sympointer}</a><br>`;
+                listing += `<div style="display: inline-block; width: 1.5vw;">(${FileD(obj)})</div> ${FileD(obj) == "-" || FileD(obj) == "l" && mclass != "dir fd" ? `<a href="/${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" download="${elem}"><i class="fa fa-download"></i></a>`: `<i class="fa fa-download" style="visibility: hidden;"></i>`} <a href="/${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" class="${mclass}">${elem} ${sympointer}</a><br>`;
                 mclass = "";
                 errlvl = 0;
                 isSym = false;
@@ -149,19 +153,19 @@ http.createServer((req, res) => {
                 <title>Firefly</title>
                 <script>
                     let desc = {};
+                    let temp;
                     async function getContent(target){
-                        let temp;
-                        await fetch(target).then(data => data.text()).then(data => {temp = data.replaceAll("<", "\\<").replaceAll(">", "\\>")});
+                        await fetch(target.href).then(data => data.text()).then(data => {temp = data.replaceAll("<", "\\<").replaceAll(">", "\\>")});
                         return temp;
                     }
                     document.addEventListener("contextmenu", async e => {
-                        if(!e.target.toString().includes("?")) return;
+                        console.log(e.target.href)
+                        if(e.target.parentElement?.className != "listing" || e.target.tagName != "A") return;
                         else {
                             e.preventDefault();
-                            console.log(e);
                             if(e.target.attributes.class.value.includes("dir")) desc[e.target.innerText] = "Selected item is a directory and cannot be read.";
                             else if(e.target.attributes.class.value.includes("r_err")) desc[e.target.innerText] = "File/Directory cannot be accessed due to the lack of read permissions.";
-                            document.getElementById("field").innerText = desc[e.target.innerText] || await getContent(e.target.href);
+                            document.getElementById("field").innerText = desc[e.target.innerText] || await getContent(e.target);
                             let listing = document.getElementsByClassName("listing")[0];
                             let info = document.getElementsByClassName("info")[0]
                             listing.style.height = Math.max(listing.scrollHeight, info.scrollHeight) + "px";
