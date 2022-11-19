@@ -119,7 +119,7 @@ http.createServer((req, res) => {
             relp = root == worp ? env_root : worp.replace(root, "");
             if(relp != env_root) listing += `<a href="${env_root}" class="dir"><b>${env_root}</b></a><br><a href="/${path.join(worp, "..")}" class="dir"><b>..</b></a><br>`;
             fs.readdirSync(worp).forEach(elem => {
-                obj = `${worp}${worp == root ? "" : env_root}${elem}`;
+                obj = `${worp}${worp == root ? "" : env_root}/${elem}`;
                 try {isSym = fs.lstatSync(obj).isSymbolicLink()} catch {};
                 try {sympointer = isSym ? `(${fs.readlinkSync(obj)})` : ""} catch {};
                 symprefix = process.platform != "win32" ? "/" : "";
