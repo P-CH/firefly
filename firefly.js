@@ -26,7 +26,7 @@ parser.set({
         call: "-n",
         desc: "sets the first 16 bit of the used net address",
         type: "regex",
-        check: /^\d{3}\.\d?\d?\d?$/,
+        check: /^\d?\d?\d?\.\d?\d?\d?\.$/,
         default: "192.168"
     },
     interface: {
