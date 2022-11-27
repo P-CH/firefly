@@ -42,6 +42,13 @@ parser.set({
         type: "toggle",
         check: true,
         default: false
+    },
+    subfolder: {
+        call: "-nsf",
+        desc: "disables subfolder access (so only the root is accessable)",
+        type: "toggle",
+        check: true,
+        default: true
     }
 });
 parser.help = "<options>\nThe specified interface might be overwritten if it does not exist but another interface supports the configured network address.";
@@ -64,6 +71,7 @@ let port = parser.get("port");
 let netaddr = parser.get("netaddr");
 let interface = parser.get("interface");
 let debug = parser.get("debug");
+let nsf = parser.get("subfolder");
 let env_root = process.platform == "win32" ? "\\" : "/";
 let interfacelist = Object.keys(os.networkInterfaces()).reduce((t, interface) => {t[interface] = os.networkInterfaces()[interface].map(obj => obj.address); return t}, {});
 let ip = Object.values(interface ? {[interface]:os.networkInterfaces()[interface].map(obj => obj.address)} : interfacelist).reduce((t, interface) => [...t, ...interface]).filter(f => {if(f.startsWith(netaddr)) return f})[0];
@@ -74,7 +82,7 @@ function debuginfo(socket){
     m = d.getMinutes() < 10 ? "0" + d.getMinutes() : d.getMinutes();
     s = d.getSeconds() < 10 ? "0" + d.getSeconds() : d.getSeconds();
     ms = d.getMilliseconds() < 100 ? d.getMilliseconds() < 10 ? "00" + d.getMilliseconds() : "0" + d.getMilliseconds() : d.getMilliseconds();
-    return `[${h}:${m}:${s}:${ms}][${socket.remoteAddress.split(":")[3]}]`;
+    return `[${h}:${m}:${s}:${ms}][${socket.remoteAddress}]`;
 }
 
 Clicp("<!fggreen>Started Firefly.<!fgwhite>");
@@ -93,8 +101,14 @@ http.createServer((req, res) => {
         return;
     }
     if(!worp.toLowerCase().includes(root.toLowerCase())){
-        if(debug) Clicp(`[<!fgyellow>Warn<!fgwhite>][<!fgyellow>307<!fgwhite>]${debuginfo(req.socket)} --> Tried to access direcory/file below the root ("${req.url.substring(1)}")`);
-        res.writeHead(307, {"Location":`http://${ip}:${port}/${root}`});
+        if(debug) Clicp(`[<!fgyellow>Warn<!fgwhite>][<!fgyellow>307<!fgwhite>]${debuginfo(req.socket)} --> Tried to access direcory/file below the root ("${worp}")`);
+        res.writeHead(307, {"Location":`http://${ip}:${port}`});
+        res.end();
+        return;
+    }
+    if(FileD(req.url.substring(1)) == "d" && nsf){
+        if(debug) Clicp(`[<!fggreen>Info<!fgwhite>][<!fgred>403<!fgwhite>]${debuginfo(req.socket)} --> Tried to access subfolder ("${worp}")`);
+        res.writeHead(403);
         res.end();
         return;
     }
@@ -133,7 +147,12 @@ http.createServer((req, res) => {
                         } catch {};
                     }
                 }
-                try {if(fs.lstatSync(obj).isDirectory() || (isSym && fs.lstatSync(symprefix + fs.readlinkSync(obj)).isDirectory())) mclass = "dir"} catch {};
+                try {
+                    if(fs.lstatSync(obj).isDirectory() || (isSym && fs.lstatSync(symprefix + fs.readlinkSync(obj)).isDirectory())){
+                        mclass = "dir"
+                        if(nsf) mclass += " nsf";
+                    }
+                } catch {};
                 if(FileD(obj) == "?") mclass = "r_err";
                 if(FileD(obj) != "?" && FileD(obj) != "-" && FileD(obj) != "d") mclass += " fd";
                 listing += `<div style="display: inline-block; width: 1.5vw;">(${FileD(obj)})</div> ${FileD(obj) == "-" || FileD(obj) == "l" && mclass != "dir fd" ? `<a href="/${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" download="${elem}"><i class="fa fa-download"></i></a>`: `<i class="fa fa-download" style="visibility: hidden;"></i>`} <a href="/${isSym ? /^(([A-Z]:(\\|\/))|\/).*$/.test(sympointer.replaceAll(/(\(|\))/g, "")) ? sympointer.replaceAll(/(\(|\))/g, "") : worp + env_root + sympointer.replaceAll(/(\(|\))/g, "") : obj}" class="${mclass}">${elem} ${sympointer}</a><br>`;
@@ -159,7 +178,6 @@ http.createServer((req, res) => {
                         return temp;
                     }
                     document.addEventListener("contextmenu", async e => {
-                        console.log(e.target.href)
                         if(e.target.parentElement?.className != "listing" || e.target.tagName != "A") return;
                         else {
                             e.preventDefault();
@@ -203,6 +221,9 @@ http.createServer((req, res) => {
                     }
                     .r_err{
                         color: black;
+                    }
+                    .nsf{
+                        color: darkgrey !important;
                     }
                     .path{
                         background-color: #0c0c0c;
@@ -260,7 +281,7 @@ http.createServer((req, res) => {
             if(debug) Clicp(`[<!fgmagenta>Error<!fgwhite>][<!fgred>404<!fgwhite>]${debuginfo(req.socket)} --> ${error.message}`);
             res.writeHead(404);
         }
-        else Clicp(`<!bgred>Exception: ${error.message}<!bgblack>`);
+        else Clicp(`<!bgred>Unhandled Exception: ${error.message}<!bgblack>`);
         res.end();
     }
 }).listen(port);
