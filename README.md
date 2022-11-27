@@ -26,6 +26,8 @@ I included file highlighting for different types/groups of files. Feel free to h
 
 ``-d`` - enables debug mode (prints all important information about requests)
 
+``-nsf`` - disallows subfolder access (meaning the only accessable directory is the root)
+
 <hr>
 
 ![PoC](https://cdn.discordapp.com/attachments/911361965547483186/1009941796169724018/unknown.png)
