@@ -1,4 +1,4 @@
-//Written by P-CH. 2022
+//Written by P-CH. 2023
 let fs = require("fs");
 
 class Parser{
@@ -141,9 +141,29 @@ let CliColorPrint = text => {
     console.log(text);
 }
 /**
+ * Returns the difference between two supplied numbers.
+ * @param {number} v1 
+ * @param {number} v2 
+ * @returns {number}
+ */
+let Diff = (v1, v2) => (v1 < v2 ? [v1, v2] : [v2, v1]).reduce((v1, v2) => v2 - v1);
+/**
+ * Returns the input the user supplied via the standard input.
+ * Usage:
+ * ```js
+ * async function main(){
+ *     let userinput = await Stdin();
+*      console.log(userinput);
+ * }
+ * ```
+ * @returns {String}
+ */
+let Stdin = async () => await new Promise(res => require("readline").createInterface(process.stdin).question("", input => res(input)));
+/**
  * Returns a list of all standard printable characters (ASCII 32 through 126)
  * @returns {String[]}
  */
 let Characters = Object.keys([...Array(95).keys()]).map(key => String.fromCharCode(parseInt(key) + 32));
 
-module.exports = {Parser, FileD, ExitMsg, CliColorPrint, Characters}
+
+module.exports = {Parser, FileD, ExitMsg, CliColorPrint, Diff, Stdin, Characters}
