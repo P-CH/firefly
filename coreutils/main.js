@@ -111,7 +111,7 @@ let FileD = file => {
  * @param {number} exitcode 
  */
 let ExitMsg = (msg, exitcode = 0) => {
-    console.log(msg);
+    CliColorPrint(msg);
     process.exit(exitcode);
 }
 /**
