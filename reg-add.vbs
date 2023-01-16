@@ -6,5 +6,5 @@ Sub RunAsAdmin()
     End If
 End Sub : RunAsAdmin()
 c.run("reg add HKCR\Directory\Background\shell\AA_firefly /ve /d Firefly")
-c.run("reg add HKCR\Directory\Background\shell\AA_firefly /v Icon /t REG_SZ /d ""%USERPROFILE%\Downloads\firefly.js""")
+c.run("reg add HKCR\Directory\Background\shell\AA_firefly /v Icon /t REG_SZ /d ""%USERPROFILE%\Downloads\firefly.ico""")
 c.run("reg add HKCR\Directory\Background\shell\AA_firefly\command /ve /d ""C:\Program Files\nodejs\node.exe %USERPROFILE%\Downloads\firefly.js -d""")
