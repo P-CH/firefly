@@ -2,6 +2,9 @@
 let fs = require("fs");
 
 class Parser{
+    constructor(env){
+        this.env = env;
+    }
     /**
      * Message to be displayed when ``Parser.showhelp()`` is called
      */
@@ -18,10 +21,10 @@ class Parser{
     /**
      * Gets the CLI argument provided after the calling tag, undefined if the tag was not supplied
      * @param {string} call e.g. "-a", "-b", etc.
-     * @returns {string | undefined}
+     * @returns {string=}
      */
     finder(call){
-        return process.argv.indexOf(call) == -1 ? undefined : process.argv.slice(2)?.[process.argv.slice(2)?.indexOf(call) + 1];
+        return this.env.indexOf(call) == -1 ? undefined : this.env.slice(2)?.[this.env.slice(2)?.indexOf(call) + 1];
     }
     /**
      * Configures the parser, overwrites the previous configuration (if any)
@@ -43,7 +46,7 @@ class Parser{
      * @param {object} parserobj
      */
     set(parserobj){
-        for(let o of Object.keys(this)) if(o != "help") delete this[o];
+        for(let o of Object.keys(this)) if(o != "help" && o != "env") delete this[o];
         this.add(parserobj);
     }
     /**
@@ -75,9 +78,9 @@ class Parser{
      * @returns {string}
      */
     get(name){
-        if(this[name]?.["type"] == "toggle") return process.argv.includes(this[name]["call"]);
+        if(this[name]?.["type"] == "toggle") return this.env.includes(this[name]["call"]);
         let check = this[name]?.["type"] == "bool" ? this[name]["check"] : this[name]?.["check"].test(this.finder(this[name]?.["call"]));
-        return process.argv.includes(this[name]?.["call"]) && check ? this.finder(this[name]["call"]) : this[name]?.["default"]
+        return this.env.includes(this[name]?.["call"]) && check ? this.finder(this[name]["call"]) : this[name]?.["default"]
     }
     /**
      * 
@@ -91,7 +94,7 @@ class Parser{
 }
 /**
  * Gets the file designator of the file supplied
- * @param {PathLike<String>} file
+ * @param {PathLike<string>} file
  */
 let FileD = file => {
     try {
@@ -153,15 +156,15 @@ let Diff = (v1, v2) => (v1 < v2 ? [v1, v2] : [v2, v1]).reduce((v1, v2) => v2 - v
  * ```js
  * async function main(){
  *     let userinput = await Stdin();
-*      console.log(userinput);
+ *     console.log(userinput);
  * }
  * ```
- * @returns {String}
+ * @returns {string}
  */
 let Stdin = async () => await new Promise(res => require("readline").createInterface(process.stdin).question("", input => res(input)));
 /**
  * Returns a list of all standard printable characters (ASCII 32 through 126)
- * @returns {String[]}
+ * @returns {string[]}
  */
 let Characters = Object.keys([...Array(95).keys()]).map(key => String.fromCharCode(parseInt(key) + 32));
 
